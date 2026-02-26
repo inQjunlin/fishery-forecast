@@ -17,10 +17,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 
 import argparse
+from typing import Optional
 
 from src.data_loader import load_dataset
 from src.feature_extraction import extract_url_features, vectorize_texts
 from src.fusion.early_fusion import train_early_fusion_from_slices
+from src.pipeline.tabular_multimodal import train_baseline_numeric, train_tabular_multimodal, train_cross_modal_attention
 
 def _detect_columns(df):
     url_col = None
@@ -82,7 +84,7 @@ def _prepare_features_from_df(df, url_col, text_col, label_col):
     url_feature_names = url_features_df.columns.tolist() if url_features_df is not None else []
     return X_url, X_text, X_fused, y, url_feature_names, text_vec
 
-def main(dataset_path: str = None, output_dir: str = "models"):
+def main(dataset_path: str = None, output_dir: str = "models", mode: str = "baseline_numeric"):
     if dataset_path is None:
         dataset_path = "data/raw/dataset.csv"
     df = load_dataset(dataset_path)
@@ -95,8 +97,23 @@ def main(dataset_path: str = None, output_dir: str = "models"):
     X_text_train, X_text_test = X_text[train_idx], X_text[test_idx]
     y_train, y_test = y[train_idx], y[test_idx]
     # 训练早期融合模型
-    model_path = os.path.join(output_dir, "early_fusion.pkl")
-    clf = train_early_fusion_from_slices(X_url_train, X_text_train, y_train, model_path=model_path)
+    if mode == "baseline_numeric":
+        # 仅基于数值特征的基线模型
+        model_path, metrics = train_baseline_numeric(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
+        print("Baseline Numeric Metrics:", metrics)
+        return
+    elif mode == "multimodal":
+        model_path, metrics = train_tabular_multimodal(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
+        print("Tabular Multimodal Metrics:", metrics)
+        return
+    elif mode == "crossmodal":
+        model_path, metrics = train_cross_modal_attention(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
+        print("Cross-Modal Attention Metrics:", metrics)
+        return
+    else:
+        # default: 早期融合骨架（兼容前面实现）
+        model_path = os.path.join(output_dir, "early_fusion.pkl")
+        clf = train_early_fusion_from_slices(X_url_train, X_text_train, y_train, model_path=model_path)
     # 测试评估
     X_test_fused = hstack([X_url_test, X_text_test]) if X_text_test.shape[1] > 0 else X_url_test
     y_score = clf.predict_proba(X_test_fused)[:, 1]
@@ -124,6 +141,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Phish detector 训练管线（早期融合）")
     parser.add_argument("--dataset", type=str, default=None, help="数据集路径，例如 data/raw/dataset.csv")
     parser.add_argument("--out", type=str, default="models", help="输出模型目录")
+    parser.add_argument("--mode", type=str, default="baseline_numeric", help="模式：baseline_numeric|multimodal|crossmodal")
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
-    main(dataset_path=args.dataset, output_dir=args.out)
+    main(dataset_path=args.dataset, output_dir=args.out, mode=args.mode)
