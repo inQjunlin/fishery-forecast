@@ -1,0 +1,11 @@
+__pycache__/
+.pytest_cache/
+data/
+data/**/*
+Dockerfile
+docker/
+models/
+venv/
+.venv/
+.env
+*.log
