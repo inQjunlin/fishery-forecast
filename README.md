@@ -25,3 +25,10 @@
 后续跟进
 - 根据阶段结果迭代融合策略与LLM提示
 - 增加对抗性测试、跨域评估与可解释性评估
+- 数据来源：应遵循公开数据集许可，避免敏感数据
+- 训练脚本：python -m src.train_pipeline --dataset data/raw/your_dataset.csv --out models
+- 数据来源：应遵循公开数据集许可，避免敏感数据
+- 运行演示：uvicorn src.api.server:app --reload --port 8000
+- 数据来源：应遵循公开数据集许可，避免敏感数据
+- 数据可视化：执行 python scripts/visualize_all.py --outputs outputs
+- 结果解读模板：docs/results_interpretation_template.md

@@ -23,6 +23,8 @@ from src.data_loader import load_dataset
 from src.feature_extraction import extract_url_features, vectorize_texts
 from src.fusion.early_fusion import train_early_fusion_from_slices
 from src.pipeline.tabular_multimodal import train_baseline_numeric, train_tabular_multimodal, train_cross_modal_attention
+from src.visualization import plot_roc_curve, plot_pr_curve
+import json
 
 def _detect_columns(df):
     url_col = None
@@ -84,7 +86,7 @@ def _prepare_features_from_df(df, url_col, text_col, label_col):
     url_feature_names = url_features_df.columns.tolist() if url_features_df is not None else []
     return X_url, X_text, X_fused, y, url_feature_names, text_vec
 
-def main(dataset_path: str = None, output_dir: str = "models", mode: str = "baseline_numeric"):
+def main(dataset_path: Optional[str] = None, output_dir: str = "models", mode: str = "baseline_numeric"):
     if dataset_path is None:
         dataset_path = "data/raw/dataset.csv"
     df = load_dataset(dataset_path)
@@ -99,16 +101,72 @@ def main(dataset_path: str = None, output_dir: str = "models", mode: str = "base
     # 训练早期融合模型
     if mode == "baseline_numeric":
         # 仅基于数值特征的基线模型
-        model_path, metrics = train_baseline_numeric(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
+        model_path, metrics, roc_data, pr_data = train_baseline_numeric(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
         print("Baseline Numeric Metrics:", metrics)
+        # 产出可视化曲线与数据
+        mode_out = os.path.join(output_dir, mode)
+        os.makedirs(mode_out, exist_ok=True)
+        # 保存数据供后续可重复使用
+        with open(os.path.join(mode_out, 'roc_data.json'), 'w', encoding='utf-8') as f:
+            json.dump(roc_data, f, ensure_ascii=False, indent=2)
+        with open(os.path.join(mode_out, 'pr_data.json'), 'w', encoding='utf-8') as f:
+            json.dump(pr_data, f, ensure_ascii=False, indent=2)
+        # 画图：确保 PR 数据包含 y_true/y_score，如果缺失则回填自适应信息
+        if 'y_true' not in pr_data or 'y_score' not in pr_data:
+            if roc_data is not None:
+                pr_data['y_true'] = roc_data.get('y_true', [])
+                pr_data['y_score'] = roc_data.get('y_score', [])
+        if 'y_true' not in pr_data:
+            pr_data['y_true'] = y_test.tolist() if isinstance(y_test, np.ndarray) else []
+        if 'y_score' not in pr_data:
+            pr_data['y_score'] = y_score.tolist() if isinstance(y_score, np.ndarray) else []
+        # 绘制 ROC/PR 曲线
+        roc_y_true = roc_data.get('y_true', [])
+        roc_y_score = roc_data.get('y_score', [])
+        # 先绘制 ROC 曲线
+        plot_roc_curve(roc_y_true, roc_y_score, save_path=os.path.join(mode_out, 'roc_curve.png'), title='ROC - Baseline Numeric')
+        # 安全地获取 PR 的 y_true/y_score，优先使用 pr_data 中的字段，其次回退到 ROC 数据
+        pr_y_true = pr_data.get('y_true', roc_y_true)
+        pr_y_score = pr_data.get('y_score', roc_y_score)
+        try:
+            plot_pr_curve(pr_y_true if pr_y_true is not None else roc_y_true,
+                          pr_y_score if pr_y_score is not None else roc_y_score,
+                          save_path=os.path.join(mode_out, 'pr_curve.png'), title='PR - Baseline Numeric')
+        except Exception:
+            # 回退至 ROC 数据的 PR 曲线作为兜底
+            plot_pr_curve(roc_y_true, roc_y_score, save_path=os.path.join(mode_out, 'pr_curve.png'), title='PR - Baseline Numeric (fallback)')
         return
     elif mode == "multimodal":
-        model_path, metrics = train_tabular_multimodal(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
+        model_path, metrics, roc_data, pr_data = train_tabular_multimodal(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
         print("Tabular Multimodal Metrics:", metrics)
+        mode_out = os.path.join(output_dir, mode)
+        os.makedirs(mode_out, exist_ok=True)
+        with open(os.path.join(mode_out, 'roc_data.json'), 'w', encoding='utf-8') as f:
+            json.dump(roc_data, f, ensure_ascii=False, indent=2)
+        with open(os.path.join(mode_out, 'pr_data.json'), 'w', encoding='utf-8') as f:
+            json.dump(pr_data, f, ensure_ascii=False, indent=2)
+        roc_y_true = roc_data.get('y_true', [])
+        roc_y_score = roc_data.get('y_score', [])
+        plot_roc_curve(roc_y_true, roc_y_score, save_path=os.path.join(mode_out, 'roc_curve.png'), title='ROC - Tabular Multimodal')
+        pr_y_true = pr_data.get('y_true', roc_y_true)
+        pr_y_score = pr_data.get('y_score', roc_y_score)
+        plot_pr_curve(pr_y_true, pr_y_score, save_path=os.path.join(mode_out, 'pr_curve.png'), title='PR - Tabular Multimodal')
         return
     elif mode == "crossmodal":
-        model_path, metrics = train_cross_modal_attention(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
+        model_path, metrics, roc_data, pr_data = train_cross_modal_attention(df, out_dir=output_dir, label_col='label', test_size=0.2, random_state=42)
         print("Cross-Modal Attention Metrics:", metrics)
+        mode_out = os.path.join(output_dir, mode)
+        os.makedirs(mode_out, exist_ok=True)
+        with open(os.path.join(mode_out, 'roc_data.json'), 'w', encoding='utf-8') as f:
+            json.dump(roc_data, f, ensure_ascii=False, indent=2)
+        with open(os.path.join(mode_out, 'pr_data.json'), 'w', encoding='utf-8') as f:
+            json.dump(pr_data, f, ensure_ascii=False, indent=2)
+        roc_y_true = roc_data.get('y_true', [])
+        roc_y_score = roc_data.get('y_score', [])
+        plot_roc_curve(roc_y_true, roc_y_score, save_path=os.path.join(mode_out, 'roc_curve.png'), title='ROC - Cross-Modal Attention')
+        pr_y_true = pr_data.get('y_true', roc_y_true)
+        pr_y_score = pr_data.get('y_score', roc_y_score)
+        plot_pr_curve(pr_y_true, pr_y_score, save_path=os.path.join(mode_out, 'pr_curve.png'), title='PR - Cross-Modal Attention')
         return
     else:
         # default: 早期融合骨架（兼容前面实现）
@@ -131,7 +189,6 @@ def main(dataset_path: str = None, output_dir: str = "models", mode: str = "base
         "f1": float(f1)
     }
     with open(os.path.join(output_dir, "train_metrics.json"), "w", encoding="utf-8") as f:
-        import json
         json.dump(metrics, f, ensure_ascii=False, indent=2)
     print("训练完成. 评估指标:")
     print(metrics)

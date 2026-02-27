@@ -1,0 +1,9 @@
+dataset: data/raw/dataset.csv
+output_dir: outputs
+modes:
+  - baseline_numeric
+  - multimodal
+  - crossmodal
+visualization:
+  enable: true
+  outputs_dir: outputs

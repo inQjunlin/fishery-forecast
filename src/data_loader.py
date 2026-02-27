@@ -23,9 +23,10 @@ def find_csv_in_dir(dir_path: str = "data/raw") -> str:
 
 def load_dataset(path: Optional[str] = None) -> pd.DataFrame:
     """
-    从给定路径加载数据集；如果 path 未提供，则自动在 data/raw 目录查找一个 CSV。
+    从给定路径加载数据集；如果 path 未提供，或路径不存在，则自动在 data/raw 目录查找一个 CSV。
     返回一个 pandas DataFrame。
     """
-    if path is None:
+    import os
+    if path is None or not os.path.exists(path):
         path = find_csv_in_dir("data/raw")
     return pd.read_csv(path)

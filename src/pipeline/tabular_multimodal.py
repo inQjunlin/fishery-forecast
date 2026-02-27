@@ -13,6 +13,7 @@ import joblib
 from typing import List
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_recall_curve, average_precision_score
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
@@ -44,7 +45,7 @@ def train_baseline_numeric(df: pd.DataFrame, out_dir: str = 'models', label_col:
     from sklearn.preprocessing import StandardScaler
     pipe = Pipeline([
         ('scaler', StandardScaler()),
-        ('clf', LogisticRegression(max_iter=1000, n_jobs=-1, solver='lbfgs'))
+        ('clf', LogisticRegression(max_iter=1000, solver='lbfgs'))
     ])
     X_tr, X_te, y_tr, y_te = train_test_split(X_num, y, test_size=test_size, random_state=random_state, stratify=y)
     pipe.fit(X_tr, y_tr)
@@ -56,9 +57,24 @@ def train_baseline_numeric(df: pd.DataFrame, out_dir: str = 'models', label_col:
     model_path = os.path.join(out_dir, 'baseline_numeric_model.pkl')
     joblib.dump({'model': pipe, 'features': numeric_features}, model_path)
     metrics = {'auc': float(auc), 'accuracy': float(acc), 'f1': float(f1)}
+    # 计算并保存 ROC/PR 数据，便于后续可视化
+    roc_data = {
+        'y_true': y_te.tolist(),
+        'y_score': y_score.tolist()
+    }
+    precision, recall, thresholds = precision_recall_curve(y_te, y_score)
+    ap = average_precision_score(y_te, y_score)
+    pr_data = {
+        'y_true': y_te.tolist(),
+        'y_score': y_score.tolist(),
+        'precision': precision.tolist(),
+        'recall': recall.tolist(),
+        'thresholds': thresholds.tolist(),
+        'average_precision': float(ap)
+    }
     with open(os.path.join(out_dir, 'baseline_numeric_metrics.json'), 'w', encoding='utf-8') as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
-    return model_path, metrics
+    return model_path, metrics, roc_data, pr_data
 
 
 def train_tabular_multimodal(df: pd.DataFrame, out_dir: str = 'models', label_col: str = 'label', test_size: float = 0.2, random_state: int = 42):
@@ -79,7 +95,7 @@ def train_tabular_multimodal(df: pd.DataFrame, out_dir: str = 'models', label_co
             ("cat", OneHotEncoder(handle_unknown='ignore'), categorical_features)
         ])
     # 模型：逻辑回归（高维稀疏特征可扩展性好）
-    clf = LogisticRegression(max_iter=1000, n_jobs=-1, solver='lbfgs')
+    clf = LogisticRegression(max_iter=1000, solver='lbfgs')
     pipe = Pipeline(steps=[('preprocessor', preprocessor), ('model', clf)])
     X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y)
     pipe.fit(X_tr, y_tr)
@@ -91,9 +107,20 @@ def train_tabular_multimodal(df: pd.DataFrame, out_dir: str = 'models', label_co
     model_path = os.path.join(out_dir, 'tabular_multimodal_model.pkl')
     joblib.dump({'model': pipe, 'numeric_features': numeric_features, 'categorical_features': categorical_features}, model_path)
     metrics = {'auc': float(auc), 'accuracy': float(acc), 'f1': float(f1)}
+    roc_data = {'y_true': y_te.tolist(), 'y_score': y_score.tolist()}
+    precision, recall, thresholds = precision_recall_curve(y_te, y_score)
+    ap = average_precision_score(y_te, y_score)
+    pr_data = {
+        'y_true': y_te.tolist(),
+        'y_score': y_score.tolist(),
+        'precision': precision.tolist(),
+        'recall': recall.tolist(),
+        'thresholds': thresholds.tolist(),
+        'average_precision': float(ap)
+    }
     with open(os.path.join(out_dir, 'tabular_multimodal_metrics.json'), 'w', encoding='utf-8') as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
-    return model_path, metrics
+    return model_path, metrics, roc_data, pr_data
 
 
 def train_cross_modal_attention(df: pd.DataFrame, out_dir: str = 'models', label_col: str = 'label', test_size: float = 0.2, random_state: int = 42):
@@ -131,6 +158,17 @@ def train_cross_modal_attention(df: pd.DataFrame, out_dir: str = 'models', label
     model_path = os.path.join(out_dir, 'cross_modal_attention_model.pkl')
     joblib.dump({'num_model': num_model, 'cat_model': cat_model, 'final_model': final_model}, model_path)
     metrics = {'auc': float(auc), 'accuracy': float(acc), 'f1': float(f1)}
+    roc_data = {'y_true': y_te.tolist(), 'y_score': y_score.tolist()}
+    precision, recall, thresholds = precision_recall_curve(y_te, y_score)
+    ap = average_precision_score(y_te, y_score)
+    pr_data = {
+        'y_true': y_te.tolist(),
+        'y_score': y_score.tolist(),
+        'precision': precision.tolist(),
+        'recall': recall.tolist(),
+        'thresholds': thresholds.tolist(),
+        'average_precision': float(ap)
+    }
     with open(os.path.join(out_dir, 'cross_modal_attention_metrics.json'), 'w', encoding='utf-8') as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
-    return model_path, metrics
+    return model_path, metrics, roc_data, pr_data

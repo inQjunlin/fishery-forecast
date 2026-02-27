@@ -6,6 +6,8 @@ fastapi>=0.95
 uvicorn>=0.22
 requests>=2.25
 python-dotenv>=1.0
+matplotlib>=3.5
+seaborn>=0.12
 scipy>=1.8
 
 # Optional for text embeddings (not strictly required for skeleton)
